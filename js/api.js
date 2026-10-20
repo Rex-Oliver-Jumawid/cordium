@@ -26,25 +26,59 @@ class API {
     return headers;
   }
 
+  // Refresh a staff access token once when Supabase reports an expired JWT.
+  async refreshSession() {
+    const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH);
+    if (!refreshToken) throw new Error("Please log in again");
+    if (!this.pendingRefresh) {
+      this.pendingRefresh = (async () => {
+        const response = await fetch(this.baseURL + "/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success || !data.token) {
+          throw new Error("Session expired. Please log in again.");
+        }
+        localStorage.setItem(STORAGE_KEYS.TOKEN, data.token);
+        localStorage.setItem(STORAGE_KEYS.REFRESH, data.refreshToken);
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user));
+        localStorage.setItem(STORAGE_KEYS.ROLE, data.user.role);
+        return data;
+      })().finally(() => { this.pendingRefresh = null; });
+    }
+    return this.pendingRefresh;
+  }
+
   // Generic request method
   async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    const config = {
-      headers: this.getHeaders(options.auth !== false),
-      ...options,
-    };
-
+    const includeAuth = options.auth !== false;
+    const { auth: _authOption, ...fetchOptions } = options;
+    const send = () => fetch(this.baseURL + endpoint, {
+      ...fetchOptions,
+      headers: { ...this.getHeaders(includeAuth), ...(fetchOptions.headers || {}) },
+    });
+    let response;
     try {
-      const response = await fetch(url, config);
+      response = await send();
+      if (response.status === 401 && includeAuth && endpoint !== "/auth/logout") {
+        try {
+          await this.refreshSession();
+          response = await send();
+        } catch (error) {
+          localStorage.removeItem(STORAGE_KEYS.TOKEN);
+          localStorage.removeItem(STORAGE_KEYS.REFRESH);
+          throw error;
+        }
+      }
       const data = await response.json();
-
       if (!response.ok) {
         const error = new Error(data.message || "Request failed");
-        error.data = data; // Include full response data
-        error.session = data.session; // Include session if exists
+        error.data = data;
+        error.session = data.session;
         throw error;
       }
-
       return data;
     } catch (error) {
       console.error("API Error:", error);
