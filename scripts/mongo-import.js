@@ -2,7 +2,7 @@
 // Decrypt + validate a MongoDB snapshot; import only with explicit --apply.
 // Never connects to or writes to the original MongoDB database.
 const crypto = require("node:crypto");
-const { EJSON } = require("mongodb");
+const { EJSON } = require("bson");
 const { Client } = require("pg");
 const { readEncrypted } = require("./backup-utils");
 
