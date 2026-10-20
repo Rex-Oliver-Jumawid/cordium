@@ -58,6 +58,9 @@ CLI-generated migration file, link the new Cordium project, and apply through
 the CLI after confirming the correct project ID. This repository file alone
 does not create tables in any Supabase project.
 
+After applying the schema, run the read-only checks in ../supabase/verify.sql
+against the same isolated project. All seven tables should be protected.
+
 The project URL and Supabase service key must be configured as environment
 secrets on the backend and Vercel. Never commit them to Git or expose
 a service key to client JavaScript.
@@ -90,8 +93,9 @@ a service key to client JavaScript.
   folder, potentially exposing backend source files.
 - The old system stores a Gmail app password in the Mongo user model.
   Eliminate this storage pattern before switching on production email.
-- A moderator status action uses PUT on the frontend and PATCH on the
-  backend. Add a route contract test and correct the mismatch.
+- The moderator status action previously used PUT in the frontend but
+  PATCH in the backend; this branch corrects the frontend to PATCH.
+  Keep it covered with an API contract test.
 - There is no automated test suite in the original package.json.
 
 ## Acceptance criteria
