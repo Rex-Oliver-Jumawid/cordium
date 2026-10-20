@@ -1,126 +1,140 @@
-# Cordium migration to Supabase and Vercel
+# Cordium: MongoDB preservation and Supabase cutover
 
-## Status
+## Current status
 
-This is a staged conversion. The existing Express controllers still use
-MongoDB/Mongoose. The initial schema migration has now been applied on the
-dedicated Cordium Supabase project, but API/controller conversion is pending.
-Do not deploy the old MongoDB backend with Supabase environment variables.
+A dedicated Cordium Supabase Free project was created in Singapore (ref: fmvvvdrjwkjqytdamrcp).
+All seven PostgreSQL tables were created, verified, and protected by RLS.
+The initial migration is recorded in Supabase migration history.
+The new Express SQL API and Supabase Auth are implemented in this branch, and 14 automated tests passed in GitHub Actions.
+The original MongoDB backend remains in the repository for rollback.
 
-**Connected database:** Cordium (Supabase project `fmvvvdrjwkjqytdamrcp`,
-Singapore, organization `wewsavbbepcvjufowuzf`). All seven tables exist
-and contain 0 rows. Initial migration `initial_cordium_schema` is recorded
-in Supabase migration history. The read-only verification SQL passed.
-The security advisor reports seven informational `rls_enabled_no_policy`
-notices because browser-role access is deliberately disabled at this stage.
+**Historical MongoDB records have not yet been copied.**
+No original connection string or backup was available in connected sources.
+The Supabase tables are currently empty.
+Do not destroy, reset, or overwrite the original MongoDB database.
 
-The PostgreSQL schema is in ../supabase/schema.sql. Its seven tables map to
-the seven original Mongoose models:
+## Source and target mapping
 
-| Mongoose model | PostgreSQL table |
+| MongoDB collection | PostgreSQL table |
 | --- | --- |
-| User | users |
-| MassSchedule | mass_schedules |
-| AttendanceSession | attendance_sessions (legacy only) |
-| AttendanceRecord | attendance_records |
-| ModeratorAssignment | moderator_assignments |
-| Contribution | contributions |
-| Expense | expenses |
+| users | public.users |
+| massschedules | public.mass_schedules |
+| attendancesessions | public.attendance_sessions |
+| attendancerecords | public.attendance_records |
+| moderatorassignments | public.moderator_assignments |
+| contributions | public.contributions |
+| expenses | public.expenses |
 
-## Important compatibility decisions
+Original MongoDB ObjectIds are saved in legacy_mongo_id fields.
+Deterministic UUIDs preserve all relational links in PostgreSQL.
+Permanent QR tokens and images are retained.
+Dates used for duplicate attendance are converted to Asia/Manila.
+Money amounts must fit two decimal places, and finance totals are shown at preflight.
 
-- User records use UUID primary keys and preserve original ObjectIds in
-  legacy_mongo_id for repeatable and auditable import.
-- Only staff who log in need to be linked to Supabase Auth via auth_user_id.
-  Members can exist as records without logging in.
-- The user role remains in a server-managed database row. The browser
-  must never be allowed to promote itself to admin.
-- Supabase Auth must manage staff credentials. Existing Mongo bcrypt hashes
-  must not be copied into app tables; set up invites or password resets.
-- Member QR codes retain their permanent opaque tokens. Generate new tokens
-  with cryptographic randomness on the trusted server.
-- Monetary values use numeric(12,2) for precision. Amount 0 remains valid
-  for backwards compatibility.
-- Duplicate scans for the same schedule/user/calendar day are rejected by
-  a unique index. Attendance dates use Asia/Manila, not UTC.
-- Old attendance sessions are modeled only for historical migration.
-- No email app password field exists in the new database. Use server-side
-  secrets and an appropriate email provider.
-- Time strings stay as HH:MM strings to preserve the frontend's forms.
-- The Data API denies anon and authenticated clients table access.
-  A trusted Express backend uses the Supabase service role only server-side
-  AFTER checking user Auth tokens and database roles.
+Passwords and stored Gmail app passwords are not imported into the new database.
+The encrypted backup retains the original MongoDB source data, including legacy fields, for offline preservation.
+Supabase Auth invitations are used for admins and moderators instead.
 
-## Isolated Supabase setup
+## Export encrypted backup (read-only)
 
-Use ONLY the dedicated Cordium project `fmvvvdrjwkjqytdamrcp`.
-The initial schema was applied successfully on this project.
-Do not apply this SQL to Prometheus-DX, PiercingCorner,
-IloveTaguigECS, or dental-clinic-sys.
+Use a trusted computer that can access the original MongoDB source.
+Install Node.js 22+ and run npm install from this branch.
+Set MONGODB_URI locally with the original database name included in the URI.
+Use a read-only MongoDB database account if available.
+Set CORDIUM_BACKUP_PASSPHRASE to a strong phrase of at least 16 characters.
+Do not commit, paste publicly, or print either secret.
 
-When the Supabase CLI is available, initialize a project migration using
-the supported CLI command:
+**Pause original MongoDB writes for the duration of the export.**
+The exporter reads collections sequentially, so writes during export could produce an inconsistent snapshot.
+For an active replica set, a separate point-in-time mongodump --oplog archive is also recommended.
 
-    supabase migration new initial_cordium_schema
+Run:
 
-Copy the reviewed contents of ../supabase/schema.sql into the resulting
-CLI-generated migration file, link the new Cordium project, and apply through
-the CLI after confirming the correct project ID. This repository file alone
-does not create tables in any Supabase project.
+    node scripts/mongo-backup.js --out=../cordium.backup.enc
 
-After applying the schema, run the read-only checks in ../supabase/verify.sql
-against the same isolated project. All seven tables should be protected.
+The tool writes a gzip-compressed, AES-256-GCM authenticated EJSON archive.
+It verifies the archive and prints its SHA-256 and per-collection counts.
+Existing backups are never overwritten and temporary partial files are removed on failure.
+Store the archive and passphrase separately in private locations.
+Never upload the backup to public GitHub.
 
-Further Supabase schema changes should be tracked as new migrations, not by
-reapplying the original migration on this project.
+## Validate before importing
 
-The project URL and Supabase service key must be configured as environment
-secrets on the backend and Vercel. Never commit them to Git or expose
-a service key to client JavaScript.
+Use the same backup passphrase, then run:
 
-## Migration and verification sequence
+    node scripts/mongo-import.js --archive=../cordium.backup.enc --plan
 
-1. Export and back up the old MongoDB data, if preservation is required.
-2. Apply the reviewed SQL to an empty, dedicated Cordium database.
-3. Convert backend auth to Supabase Auth and validate a user via getUser on
-   each request. Load the linked user row and check admin/moderator roles
-   on the server, not in browser-controlled metadata.
-4. Convert user management and QR attendance controllers, preserving REST
-   paths and response shapes used by the existing frontend.
-5. Convert mass schedules, contributions, expenses, and reporting queries.
-6. Migrate data in FK order: users, schedules, legacy attendance sessions,
-   attendance records, moderator assignments, contributions, expenses.
-7. Reconcile record counts and the precise total contributions/expenses.
-   Investigate legacy duplicate scans instead of silently dropping records.
-8. Move the public HTML/CSS/JS/images/favicon assets into Vercel's public
-   directory, export the Express app, and configure one Vercel project.
-9. Test staff login, token refresh/logout, QR scans, report totals,
-   absence email, permissions, and Vercel preview before production.
+The preflight decrypts and verifies the source archive, maps references, and detects:
+- Orphaned references, duplicate case-insensitive emails or usernames.
+- Duplicate attendance scans in the same schedule on the same Manila calendar date.
+- Unsupported QR token formats and invalid precision or negative amounts.
+- Corrupt, incomplete, or modified encrypted source archives.
 
-## Source security issues to resolve
+The report shows all seven source collection counts, finance totals in PHP, and the number of staff accounts needing Auth invitations.
+No PostgreSQL writes occur in plan mode.
 
-- A previous version of backend/create-admin.js contained a literal password.
-  Even after removing it from the branch, the secret remains in Git history.
-  Rotate any reused credential.
-- The old Express static configuration exposed the repository's parent
-  folder, potentially exposing backend source files.
-- The old system stores a Gmail app password in the Mongo user model.
-  Eliminate this storage pattern before switching on production email.
-- The moderator status action previously used PUT in the frontend but
-  PATCH in the backend; this branch corrects the frontend to PATCH.
-  Keep it covered with an API contract test.
-- There is no automated test suite in the original package.json.
+## Import into Cordium Supabase only
 
-## Acceptance criteria
+After preflight passes, configure SUPABASE_DATABASE_URL locally with the Supabase PostgreSQL transaction pooler URL for Cordium.
+Its hostname or username must identify the exact project ref fmvvvdrjwkjqytdamrcp.
+The importer refuses connections to other Supabase projects and refuses to run if any target table already contains rows.
 
-- Independent Supabase project with validated schema and RLS.
-- Working staff login and role-protected routes, including token expiration.
-- Permanent QR scan and same-day duplicate/concurrent scan protection.
-- Accurate finance, schedules, and attendance reports after import.
-- No ability to read or mutate protected tables as anon/authenticated.
-- No credentials in Git or publicly served files.
-- Passing preview E2E verification before Vercel production deploy.
+Run:
 
-This branch supplies schema and initial security fixes. It does not yet
-include a live Supabase project, converted controllers, migrated records,
-or a deployed Vercel website.
+    node scripts/mongo-import.js --archive=../cordium.backup.enc --apply
+
+The import runs in a single PostgreSQL transaction.
+Any SQL error triggers ROLLBACK, leaving no partial import.
+The old MongoDB database is not contacted or changed by this command.
+
+After importing, run the read-only checks in supabase/verify.sql.
+Reconcile each collection count, member QR data, attendance samples, and contribution/expense totals.
+Keep both the old MongoDB and the offline encrypted archive until final cutover approval.
+
+## Migrate staff login to Supabase Auth
+
+The new backend requires SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_DATABASE_URL, and server-side SUPABASE_SERVICE_ROLE_KEY.
+The service key must never be embedded in browser JavaScript, included in a public repository, or exposed as NEXT_PUBLIC variables.
+Configure FRONTEND_URL as the HTTPS URL of the new Cordium deployment.
+
+After the data is imported and a tested HTTPS preview is available, configure Supabase Auth's redirect allowlist and SMTP sender.
+Staff must reset their passwords through invitations.
+Do not copy old Mongo bcrypt hashes or reuse exposed legacy admin passwords.
+
+Preview eligible staff without sending email:
+
+    node scripts/invite-staff.js --plan
+
+After SMTP is configured, perform the invites:
+
+    node scripts/invite-staff.js --apply
+
+Invitations link each Supabase Auth identity to the imported user.
+The new password setup page is html/reset-password.html.
+The original Mongo member profiles continue to exist without needing login accounts.
+
+## Vercel configuration
+
+The new application entry point is root app.js.
+The static build copies only html, css, js, images, and favicon into generated public/ assets.
+The backend and migration scripts are never served as static assets.
+Use a separate Vercel project and keep MongoDB credentials and backup passphrases off Vercel.
+Configure the four Supabase environment variables and FRONTEND_URL in the Cordium project only.
+Test a preview deployment before enabling production.
+
+## Known limitations and safety
+
+Email schedule notifications and absence follow-ups require a new transactional email provider and are not yet implemented.
+The insecure stored Gmail app-password endpoint returns HTTP 410.
+Public member signup and temporary QR generation are intentionally disabled in favor of moderator-issued permanent QR codes.
+Existing reports currently cap retrieved records at 10,000 pending proper pagination for large deployments.
+Real live E2E tests with an imported database, browser login, and QR scan are still required.
+The npm-generated root lockfile should be generated and committed by npm from a trusted environment, not manually edited.
+Historic Git commits contained admin credentials; rotate those credentials wherever reused.
+
+Do not deploy to production or decommission MongoDB until:
+1. The backup passes integrity and record count checks.
+2. All imported records and relational references reconcile.
+3. Admin/moderator Auth accounts are invited and role-checked.
+4. QR scanning, expense transactions, admin reports and login work in a Vercel preview.
+5. The complete acceptance test suite passes and the rollback archive is retained.
