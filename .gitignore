@@ -6,3 +6,9 @@
 **/.DS_Store
 *.log
 .vercel/
+
+# Encrypted backups are sensitive and must never be committed
+*.backup.enc
+*.backup.enc.*
+backups/
+public/
