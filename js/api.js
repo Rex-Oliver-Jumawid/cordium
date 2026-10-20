@@ -167,7 +167,7 @@ class API {
   }
 
   async updateUserStatusAsModerator(userId, isActive) {
-    return this.put(
+    return this.patch(
       API_CONFIG.ENDPOINTS.MODERATOR_UPDATE_USER_STATUS.replace(":id", userId),
       { isActive },
     );
