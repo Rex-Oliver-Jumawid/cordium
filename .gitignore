@@ -1,2 +1,8 @@
-NUL
-backend/NUL
+# Local credentials and runtimes
+.env
+.env.*
+!.env.example
+**/node_modules/
+**/.DS_Store
+*.log
+.vercel/
