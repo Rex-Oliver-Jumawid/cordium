@@ -3,8 +3,16 @@
 ## Status
 
 This is a staged conversion. The existing Express controllers still use
-MongoDB/Mongoose. The SQL schema is a reference, NOT a live migration.
+MongoDB/Mongoose. The initial schema migration has now been applied on the
+dedicated Cordium Supabase project, but API/controller conversion is pending.
 Do not deploy the old MongoDB backend with Supabase environment variables.
+
+**Connected database:** Cordium (Supabase project `fmvvvdrjwkjqytdamrcp`,
+Singapore, organization `wewsavbbepcvjufowuzf`). All seven tables exist
+and contain 0 rows. Initial migration `initial_cordium_schema` is recorded
+in Supabase migration history. The read-only verification SQL passed.
+The security advisor reports seven informational `rls_enabled_no_policy`
+notices because browser-role access is deliberately disabled at this stage.
 
 The PostgreSQL schema is in ../supabase/schema.sql. Its seven tables map to
 the seven original Mongoose models:
@@ -45,8 +53,10 @@ the seven original Mongoose models:
 
 ## Isolated Supabase setup
 
-Use a dedicated NEW Cordium project. Do not apply this SQL to Prometheus-DX,
-PiercingCorner, IloveTaguigECS, or dental-clinic-sys.
+Use ONLY the dedicated Cordium project `fmvvvdrjwkjqytdamrcp`.
+The initial schema was applied successfully on this project.
+Do not apply this SQL to Prometheus-DX, PiercingCorner,
+IloveTaguigECS, or dental-clinic-sys.
 
 When the Supabase CLI is available, initialize a project migration using
 the supported CLI command:
@@ -60,6 +70,9 @@ does not create tables in any Supabase project.
 
 After applying the schema, run the read-only checks in ../supabase/verify.sql
 against the same isolated project. All seven tables should be protected.
+
+Further Supabase schema changes should be tracked as new migrations, not by
+reapplying the original migration on this project.
 
 The project URL and Supabase service key must be configured as environment
 secrets on the backend and Vercel. Never commit them to Git or expose
