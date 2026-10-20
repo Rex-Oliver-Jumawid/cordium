@@ -41,8 +41,13 @@ async function main() {
     await client.connect();
     const db = client.db();
     const available = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map((x) => x.name));
+    if (!available.has("users")) {
+      throw new Error("Missing source users collection; check the MongoDB database name.");
+    }
     const missing = COLLECTIONS.filter((name) => !available.has(name));
-    if (missing.length) throw new Error("Missing source collection(s): " + missing.join(", "));
+    if (missing.length) {
+      console.warn("Absent collections (treated as empty): " + missing.join(", "));
+    }
     const counts = {};
     const write = async (value) => {
       if (!source.write(JSON.stringify(value) + "\n")) await once(source, "drain");
@@ -50,6 +55,7 @@ async function main() {
     await write({ type: "header", version: 1, database: db.databaseName, createdAt: new Date().toISOString() });
     for (const name of COLLECTIONS) {
       counts[name] = 0;
+      if (!available.has(name)) continue;
       const cursor = db.collection(name).find({}, { batchSize: 200 });
       for await (const doc of cursor) {
         await write({ type: "doc", collection: name, data: EJSON.serialize(doc, { relaxed: false }) });
