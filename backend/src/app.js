@@ -3,8 +3,8 @@ const cors = require("cors");
 const path = require("path");
 
 const app = express();
+const frontendRoot = path.resolve(__dirname, "../..");
 
-// Middleware
 app.use(express.json());
 app.use(
   cors({
@@ -13,22 +13,19 @@ app.use(
   })
 );
 
-// Import Routes
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const moderatorRoutes = require("./routes/moderator.routes");
 const userRoutes = require("./routes/user.routes");
 const massScheduleRoutes = require("./routes/massSchedule.routes");
 
-// API Routes (MUST COME BEFORE STATIC FILES)
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/moderator", moderatorRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/mass-schedules", massScheduleRoutes);
 
-// Health Check
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({
     status: "OK",
     message: "Church Attendance System API is running",
@@ -36,17 +33,19 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Serve static files from the parent directory (frontend)
-// This must come AFTER API routes
-app.use(express.static(path.join(__dirname, "../../")));
+// Only expose client assets, never the backend folder or repository files.
+for (const directory of ["html", "css", "js", "images", "favicon"]) {
+  app.use(
+    "/" + directory,
+    express.static(path.join(frontendRoot, directory), { dotfiles: "deny" })
+  );
+}
 
-// Serve index.html for root path
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../../html/login.html"));
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(frontendRoot, "html/login.html"));
 });
 
-// Error Handler
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
   console.error(err.stack);
   res.status(500).json({
     success: false,
