@@ -8,7 +8,8 @@ const zlib = require("node:zlib");
 const { PassThrough } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { once } = require("node:events");
-const { MongoClient, EJSON } = require("mongodb");
+const { MongoClient } = require("mongodb");
+const { EJSON } = require("bson");
 const { MAGIC, passphrase, encryptStream, readEncrypted } = require("./backup-utils");
 
 const COLLECTIONS = [
