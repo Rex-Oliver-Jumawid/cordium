@@ -123,6 +123,21 @@ function installAuth(app) {
     return res.json({ success: true, message: "If eligible, instructions will be emailed" });
   }));
 
+  app.post("/api/auth/verify-link", route(async (req, res) => {
+    const { tokenHash, type } = req.body || {};
+    if (typeof tokenHash !== "string" || !["invite", "recovery"].includes(type)) {
+      fail("Invalid invitation or recovery link", 400);
+    }
+    const { data, error } = await authClient().auth.verifyOtp({
+      token_hash: tokenHash, type,
+    });
+    if (error || !data?.session) fail("Link expired or invalid", 401);
+    res.json({
+      success: true, accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+    });
+  }));
+
   app.post("/api/auth/set-password", route(async (req, res) => {
     const { accessToken, refreshToken, password } = req.body || {};
     if (typeof accessToken !== "string" || typeof refreshToken !== "string" ||
