@@ -20,10 +20,21 @@ const COLLECTIONS = [
 async function main() {
   passphrase();
   const targetArg = process.argv.find((a) => a.startsWith("--out="));
-  if (!targetArg) throw new Error("Usage: node scripts/mongo-backup.js --out=/private/path/cordium.backup.enc");
+  if (!targetArg) throw new Error("Usage: node scripts/mongo-backup.js --source=atlas|local --out=/private/path/source.backup.enc");
   const target = path.resolve(targetArg.slice("--out=".length));
   if (fs.existsSync(target)) throw new Error("Refusing to overwrite an existing backup.");
-  if (!process.env.MONGODB_URI) throw new Error("Set MONGODB_URI privately in the local environment.");
+  const chosen = process.argv.find((a) => a.startsWith("--source="));
+  const sourceName = chosen && chosen.slice("--source=".length);
+  if (sourceName && !["atlas", "local"].includes(sourceName)) {
+    throw new Error("Source must be atlas or local.");
+  }
+  const envPrefix = sourceName ? "CORDIUM_" + sourceName.toUpperCase() : "CORDIUM_SOURCE";
+  const uri = process.env[sourceName ? envPrefix + "_URI" : "MONGODB_URI"];
+  const dbName = process.env[envPrefix + "_DB"];
+  if (!uri || !dbName) {
+    throw new Error("Set the private MongoDB connection URI and explicit database name before backup.");
+  }
+  if (!/^[a-zA-Z0-9_\-]+$/.test(dbName)) throw new Error("Invalid MongoDB database name.");
   fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
   const temp = target + ".partial-" + process.pid;
   const salt = crypto.randomBytes(16);
@@ -33,14 +44,14 @@ async function main() {
   output.write(Buffer.concat([MAGIC, salt, iv]));
   // Consume pipeline failure on cleanup.
   const writePromise = pipeline(source, zlib.createGzip(), encryptStream(salt, iv), output);
-  const client = new MongoClient(process.env.MONGODB_URI, {
+  const client = new MongoClient(uri, {
     appName: "cordium-readonly-backup",
     readPreference: "primary",
   });
   let success = false;
   try {
     await client.connect();
-    const db = client.db();
+    const db = client.db(dbName);
     const available = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map((x) => x.name));
     if (!available.has("users")) {
       throw new Error("Missing source users collection; check the MongoDB database name.");
@@ -80,6 +91,7 @@ async function main() {
     const sha = crypto.createHash("sha256");
     for await (const chunk of fs.createReadStream(target)) sha.update(chunk);
     console.log(JSON.stringify({
+      source: sourceName || "configured MongoDB",
       archive: target,
       sha256: sha.digest("hex"),
       counts,
