@@ -35,11 +35,57 @@ Passwords and stored Gmail app passwords are not imported into the new database.
 The encrypted backup retains the original MongoDB source data, including legacy fields, for offline preservation.
 Supabase Auth invitations are used for admins and moderators instead.
 
+## Atlas versus local source comparison
+
+Cordium exists in both MongoDB Atlas and a local MongoDB database.
+**Never assume one is the authoritative copy by name or collection count alone.**
+First run a read-only comparison, then export each database to a DIFFERENT encrypted archive.
+
+Use a trusted computer that can access both databases.
+Install Node.js 22+ and run `npm install`.
+Set these environment variables privately on that machine:
+
+- `CORDIUM_ATLAS_URI`: MongoDB Atlas connection URI using a read-only account.
+- `CORDIUM_ATLAS_DB`: exact Atlas Cordium database name.
+- `CORDIUM_LOCAL_URI`: local MongoDB URI using a read-only account.
+- `CORDIUM_LOCAL_DB`: exact local Cordium database name.
+- `CORDIUM_BACKUP_PASSPHRASE`: strong passphrase, at least 16 characters.
+
+Never paste any URI, password, backup passphrase or archive into public chat or GitHub.
+Pause writes to both source databases during comparison and export if possible.
+
+Compare both complete source datasets:
+
+    node scripts/compare-mongo-sources.js
+
+Output includes counts, SHA-256 document-set fingerprints, and latest activity timestamp by collection.
+It never prints member information.
+Identical hashes and counts suggest matching snapshots at read time; differing hashes mean records or values differ.
+**Same counts do NOT prove identical data.**
+If differences exist, preserve both backups and review them before choosing a canonical source.
+Do not blindly merge or overwrite either database.
+
+Create both encrypted backups without changing their contents:
+
+    node scripts/mongo-backup.js --source=atlas --out=../cordium-atlas.backup.enc
+    node scripts/mongo-backup.js --source=local --out=../cordium-local.backup.enc
+
+The exporter uses the explicit database names set above and refuses existing output files.
+Run a `--plan` import preflight separately on BOTH archives before selecting any source:
+
+    node scripts/mongo-import.js --archive=../cordium-atlas.backup.enc --plan
+    node scripts/mongo-import.js --archive=../cordium-local.backup.enc --plan
+
+Only select a source for `--apply` after checking that nothing unique to the other source is lost.
+If the old datasets differ, prioritize reconciliation and a verified merged offline archive.
+Do not import into Supabase until that reconciliation is complete.
+
 ## Export encrypted backup (read-only)
 
 Use a trusted computer that can access the original MongoDB source.
 Install Node.js 22+ and run npm install from this branch.
-Set MONGODB_URI locally with the original database name included in the URI.
+With two sources, use CORDIUM_ATLAS_URI + CORDIUM_ATLAS_DB or CORDIUM_LOCAL_URI + CORDIUM_LOCAL_DB as documented above.
+For legacy single-source exports, use MONGODB_URI and CORDIUM_SOURCE_DB.
 Use a read-only MongoDB database account if available.
 Set CORDIUM_BACKUP_PASSPHRASE to a strong phrase of at least 16 characters.
 Do not commit, paste publicly, or print either secret.
@@ -50,7 +96,7 @@ For an active replica set, a separate point-in-time mongodump --oplog archive is
 
 Run:
 
-    node scripts/mongo-backup.js --out=../cordium.backup.enc
+    node scripts/mongo-backup.js --source=atlas --out=../cordium-atlas.backup.enc
 
 The tool writes a gzip-compressed, AES-256-GCM authenticated EJSON archive.
 It verifies the archive and prints its SHA-256 and per-collection counts.
@@ -62,7 +108,7 @@ Never upload the backup to public GitHub.
 
 Use the same backup passphrase, then run:
 
-    node scripts/mongo-import.js --archive=../cordium.backup.enc --plan
+    node scripts/mongo-import.js --archive=../cordium-atlas.backup.enc --plan
 
 The preflight decrypts and verifies the source archive, maps references, and detects:
 - Orphaned references, duplicate case-insensitive emails or usernames.
@@ -81,7 +127,7 @@ The importer refuses connections to other Supabase projects and refuses to run i
 
 Run:
 
-    node scripts/mongo-import.js --archive=../cordium.backup.enc --apply
+    node scripts/mongo-import.js --archive=../cordium-atlas.backup.enc --apply
 
 The import runs in a single PostgreSQL transaction.
 Any SQL error triggers ROLLBACK, leaving no partial import.
