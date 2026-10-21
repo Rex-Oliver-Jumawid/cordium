@@ -1,0 +1,26 @@
+{
+  "name": "cordium-supabase",
+  "version": "2.0.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node app.js",
+    "build": "node scripts/build-public.js",
+    "test": "node --test test/*.test.js",
+    "backup": "node scripts/mongo-backup.js",
+    "migrate:plan": "node scripts/mongo-import.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.118.0",
+    "dotenv": "16.6.1",
+    "express": "5.3.0",
+    "mongodb": "7.7.0",
+    "pg": "8.23.1",
+    "qrcode": "1.5.4",
+    "bson": "7.3.2"
+  }
+}

@@ -72,10 +72,6 @@
     </footer>
     -->
 
-    <script src="../js/config.js"></script>
-    <script src="../js/api.js"></script>
-    <script src="../js/auth.js"></script>
-
     <!-- Load scripts in order -->
     <script src="../js/config.js"></script>
     <script src="../js/utils.js"></script>
@@ -136,8 +132,18 @@
         });
 
       // Forgot password handler
-      function handleForgotPassword() {
-        alert("Please contact the administrator to reset your password.");
+      async function handleForgotPassword() {
+        const email = document.getElementById("email").value.trim();
+        if (!isValidEmail(email)) {
+          showError("Enter your staff email first, then choose Forgot password.");
+          return;
+        }
+        try {
+          await api.post("/auth/recover", { email }, { auth: false });
+          showSuccess("If the email is linked to staff, reset instructions will be sent.");
+        } catch (error) {
+          showError(error.message || "Unable to send recovery email.");
+        }
       }
     </script>
   </body>

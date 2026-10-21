@@ -47,6 +47,7 @@ const API_CONFIG = {
 // Local Storage Keys
 const STORAGE_KEYS = {
   TOKEN: "auth_token",
+  REFRESH: "auth_refresh_token",
   USER: "user_data",
   ROLE: "user_role",
 };

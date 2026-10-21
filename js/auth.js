@@ -17,8 +17,9 @@ class AuthManager {
   }
 
   // Save auth data to localStorage
-  saveToStorage(token, user) {
+  saveToStorage(token, user, refreshToken) {
     localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+    if (refreshToken) localStorage.setItem(STORAGE_KEYS.REFRESH, refreshToken);
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     localStorage.setItem(STORAGE_KEYS.ROLE, user.role);
     this.token = token;
@@ -28,6 +29,7 @@ class AuthManager {
   // Clear auth data
   clearStorage() {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.REFRESH);
     localStorage.removeItem(STORAGE_KEYS.USER);
     localStorage.removeItem(STORAGE_KEYS.ROLE);
     this.token = null;
@@ -59,7 +61,7 @@ class AuthManager {
     try {
       const response = await api.register(userData);
       if (response.success) {
-        this.saveToStorage(response.token, response.user);
+        this.saveToStorage(response.token, response.user, response.refreshToken);
         return response;
       }
       throw new Error(response.message);
@@ -73,7 +75,7 @@ class AuthManager {
     try {
       const response = await api.login(email, password);
       if (response.success) {
-        this.saveToStorage(response.token, response.user);
+        this.saveToStorage(response.token, response.user, response.refreshToken);
         return response;
       }
       throw new Error(response.message);
@@ -138,6 +140,7 @@ class AuthManager {
 
     try {
       const response = await api.getMe();
+      this.token = localStorage.getItem(STORAGE_KEYS.TOKEN);
       if (response.success) {
         // Update user data
         this.user = response.user;
